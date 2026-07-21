@@ -1,0 +1,21 @@
+# Normalize line endings across Windows/macOS/Linux contributors so diffs
+# don't fill up with CRLF/LF noise (see: cross-platform contributor friction).
+* text=auto eol=lf
+
+*.py text eol=lf
+*.sh text eol=lf
+*.md text eol=lf
+*.json text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+
+# Windows-only helper scripts, if any are added later, keep CRLF
+*.bat text eol=crlf
+*.ps1 text eol=crlf
+
+# Binary files - do not touch
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary

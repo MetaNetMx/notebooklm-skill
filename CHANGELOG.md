@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.0] - 2026-07-21 (fork: MetaNetMx/notebooklm-skill)
+
+### Added
+- **macOS setup notes** in README - Homebrew/python.org Python install, the one-time Gatekeeper prompt on a freshly-downloaded Chrome, Apple Silicon notes, and a `zsh`-specific `python3` gotcha.
+- **Linux setup notes** - `patchright install --with-deps chrome` for missing system libraries, and a note that a display is required (no out-of-the-box headless/server support).
+- **Cross-platform CI** (`.github/workflows/ci.yml`) - installs dependencies and byte-compiles every script on Ubuntu, macOS, and Windows (Python 3.10 and 3.12) on every push/PR. Deliberately does not attempt a real Google login in CI - see `SECURITY.md` for why.
+- **Open-source scaffolding**: `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SECURITY.md`, GitHub issue templates (bug report / feature request), and a PR template.
+- **`.gitattributes`** - normalizes line endings to LF for text files so Windows/macOS/Linux contributors stop producing CRLF/LF diff noise against each other.
+
+### Changed
+- Consolidated the old "Windows Setup Notes" section into a single "Platform-Specific Setup Notes" section covering macOS, Windows, and Linux.
+
 ## [1.4.0] - 2026-07-21 (fork: MetaNetMx/notebooklm-skill)
 
 ### Added
