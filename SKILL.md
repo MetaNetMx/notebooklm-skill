@@ -165,6 +165,14 @@ python scripts/run.py notebook_manager.py stats
 python scripts/run.py ask_question.py --question "..." [--notebook-id ID] [--notebook-url URL] [--show-browser]
 ```
 
+### Notebook Discovery (`list_notebooks.py`)
+Reads the real "All notebooks" grid straight from notebooklm.google.com (not the local library) and sorts by most recent. Use this when the user asks things like "what's my latest notebook" without having added anything to the library yet.
+```bash
+python scripts/run.py list_notebooks.py                # top 10, most recent first
+python scripts/run.py list_notebooks.py --limit 5
+python scripts/run.py list_notebooks.py --json          # machine-readable output
+```
+
 ### Data Cleanup (`cleanup_manager.py`)
 ```bash
 python scripts/run.py cleanup_manager.py                    # Preview cleanup

@@ -17,6 +17,16 @@
 
 ---
 
+## 🍴 About This Fork
+
+This is a fork of [PleasePrompto/notebooklm-skill](https://github.com/PleasePrompto/notebooklm-skill) (all credit for the original design goes there — see [Credits](#credits)). This fork adds:
+
+- **Windows setup fixes** — dependency install and emoji/encoding steps that trip up a fresh Windows machine (see [Windows Setup Notes](#windows-setup-notes-fix-for-a-fresh-install))
+- **`list_notebooks.py`** — reads the real "All notebooks" grid straight from the account (no manual add needed) and sorts by most recent, handling the "Gemini Notebook" rebrand's welcome modal automatically
+- Notes on Google's 2026 rebrand of NotebookLM to **"Gemini Notebook"** (same product, same URL — just a new name and a one-time welcome dialog)
+
+---
+
 ## ⚠️ Important: Local Claude Code Only
 
 **This skill works ONLY with local [Claude Code](https://github.com/anthropics/claude-code) installations, NOT in the web UI.**
@@ -74,11 +84,13 @@ mkdir -p ~/.claude/skills
 
 # 2. Clone this repository
 cd ~/.claude/skills
-git clone https://github.com/PleasePrompto/notebooklm-skill notebooklm
+git clone https://github.com/MetaNetMx/notebooklm-skill notebooklm
 
 # 3. That's it! Open Claude Code and say:
 "What are my skills?"
 ```
+
+**Windows users:** if step "installs dependencies automatically" fails or you see a `patchright` import error, jump to [Windows Setup Notes](#windows-setup-notes-fix-for-a-fresh-install) — it's a two-command fix.
 
 When you first use the skill, it automatically:
 - Creates an isolated Python environment (`.venv`)
@@ -107,6 +119,8 @@ Claude will list your available skills including NotebookLM.
 "Set up NotebookLM authentication"
 ```
 *A Chrome window opens → log in with your Google account*
+
+> Note: Google renamed NotebookLM's UI to **"Gemini Notebook"** in 2026. It's the same product at the same URL — the only visible change is a one-time "Comenzar"/"Get started" welcome dialog the first time the page loads. The scripts in this skill already dismiss it automatically.
 
 ### 3. Create your knowledge base
 
@@ -207,7 +221,8 @@ Uses realistic typing speeds and interaction patterns to avoid detection.
 |--------------|--------------|
 | *"Set up NotebookLM authentication"* | Opens Chrome for Google login |
 | *"Add [link] to my NotebookLM library"* | Saves notebook with metadata |
-| *"Show my NotebookLM notebooks"* | Lists all saved notebooks |
+| *"Show my NotebookLM notebooks"* | Lists all saved notebooks (local library) |
+| *"What's the last notebook I created?"* | Reads the real account grid via `list_notebooks.py` and sorts by date |
 | *"Ask my API docs about [topic]"* | Queries the relevant notebook |
 | *"Use the React notebook"* | Sets active notebook |
 | *"Clear NotebookLM data"* | Fresh start (keeps library) |
@@ -350,6 +365,35 @@ source .venv/bin/activate  # or .venv\Scripts\activate on Windows
 pip install -r requirements.txt
 ```
 
+### Windows Setup Notes (fix for a fresh install)
+
+On Windows, two things commonly go wrong the first time, even though `run.py` is supposed to handle setup automatically:
+
+**1. `ModuleNotFoundError: No module named 'patchright'`**
+
+This happens if the `.venv` folder was created (e.g. by an earlier partial run) but the dependency install step didn't finish. Fix it by installing straight into the existing venv:
+
+```powershell
+cd ~/.claude/skills/notebooklm
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe -m patchright install chrome
+```
+
+If patchright reports `"chrome" is already installed on the system!`, that's fine — it means Chrome is already available and no further action is needed.
+
+**2. `UnicodeEncodeError: 'charmap' codec can't encode character '\U0001f510'`**
+
+Windows' default terminal encoding (cp1252) can't print the emoji these scripts use for status output. Force UTF-8 for the session:
+
+```powershell
+$env:PYTHONIOENCODING = "utf-8"
+python scripts/run.py auth_manager.py status
+```
+
+(Or on Git Bash: `PYTHONIOENCODING=utf-8 python scripts/run.py auth_manager.py status`)
+
+Once authenticated, `auth_manager.py setup` opens a real Chrome window — log in manually there, exactly like on macOS/Linux.
+
 ---
 
 ## Disclaimer
@@ -397,7 +441,7 @@ Stop the copy-paste dance. Start getting accurate, grounded answers directly in 
 ```bash
 # Get started in 30 seconds
 cd ~/.claude/skills
-git clone https://github.com/PleasePrompto/notebooklm-skill notebooklm
+git clone https://github.com/MetaNetMx/notebooklm-skill notebooklm
 # Open Claude Code: "What are my skills?"
 ```
 

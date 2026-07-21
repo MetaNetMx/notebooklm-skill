@@ -52,6 +52,7 @@ def main():
         print("\nAvailable scripts:")
         print("  ask_question.py    - Query NotebookLM")
         print("  notebook_manager.py - Manage notebook library")
+        print("  list_notebooks.py   - List notebooks straight from the account (sorted by most recent)")
         print("  session_manager.py  - Manage sessions")
         print("  auth_manager.py     - Handle authentication")
         print("  cleanup_manager.py  - Clean up skill data")
