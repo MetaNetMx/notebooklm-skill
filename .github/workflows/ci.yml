@@ -30,6 +30,10 @@ jobs:
           pip install -r requirements.txt
 
       - name: Byte-compile all scripts (syntax check)
+        # bash is required here: on windows-latest, steps default to PowerShell,
+        # which does not glob-expand scripts/*.py and passes it through literally,
+        # causing py_compile to fail with "[Errno 22] Invalid argument".
+        shell: bash
         run: python -m py_compile scripts/*.py
 
       - name: Confirm patchright imports correctly
