@@ -42,3 +42,15 @@ def test_installer_module_loads():
     spec.loader.exec_module(module)
     assert module.default_root("claude").name == "skills"
     assert module.default_root("codex").name == "skills"
+
+
+def test_browser_backend_is_supported():
+    from browser_api import BROWSER_BACKEND
+
+    assert BROWSER_BACKEND in {"patchright", "playwright"}
+
+
+def test_wrapper_accepts_current_python_runtime():
+    import run
+
+    assert run.environment_works(Path(sys.executable))
