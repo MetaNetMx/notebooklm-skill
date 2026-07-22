@@ -70,7 +70,15 @@ jobs:
         run: pytest -q
 
       - name: Exercise wrapper without authentication
-        run: python scripts/run.py auth_manager.py status
+        shell: bash
+        run: |
+          set +e
+          output=$(python scripts/run.py auth_manager.py status 2>&1)
+          code=$?
+          set -e
+          echo "$output"
+          test "$code" -eq 3
+          grep -q "auth_manager.py ensure --timeout 15" <<< "$output"
 
   package-skill:
     name: Package skill.zip
