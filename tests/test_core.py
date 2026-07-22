@@ -54,3 +54,30 @@ def test_wrapper_accepts_current_python_runtime():
     import run
 
     assert run.environment_works(Path(sys.executable))
+
+
+def test_auth_parser_exposes_ensure_command():
+    from auth_manager import build_parser
+
+    args = build_parser().parse_args(["ensure", "--timeout", "15"])
+    assert args.command == "ensure"
+    assert args.timeout == 15
+
+
+def test_saved_state_requires_google_session_cookie(tmp_path, monkeypatch):
+    import auth_manager
+
+    state_file = tmp_path / "state.json"
+    auth_info_file = tmp_path / "auth_info.json"
+    browser_state_dir = tmp_path / "browser_state"
+    browser_state_dir.mkdir()
+    monkeypatch.setattr(auth_manager, "STATE_FILE", state_file)
+    monkeypatch.setattr(auth_manager, "AUTH_INFO_FILE", auth_info_file)
+    monkeypatch.setattr(auth_manager, "BROWSER_STATE_DIR", browser_state_dir)
+    monkeypatch.setattr(auth_manager, "DATA_DIR", tmp_path)
+
+    manager = auth_manager.AuthManager()
+    state_file.write_text('{"cookies": [{"name": "NID"}]}', encoding="utf-8")
+    assert manager.is_authenticated() is False
+    state_file.write_text('{"cookies": [{"name": "SID"}]}', encoding="utf-8")
+    assert manager.is_authenticated() is True
