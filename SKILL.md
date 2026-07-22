@@ -1,277 +1,106 @@
 ---
 name: notebooklm
-description: Use this skill to query your Google NotebookLM notebooks directly from Claude Code for source-grounded, citation-backed answers from Gemini. Browser automation, library management, persistent auth. Drastically reduced hallucinations through document-only responses.
+description: Query Google NotebookLM notebooks through a local authenticated Chrome session and return source-grounded answers from the user's uploaded material. Use when the user mentions NotebookLM, provides a notebooklm.google.com/notebook URL, asks to search or question their NotebookLM sources, manage a local notebook library, authenticate NotebookLM, or list notebooks from their account. Designed for local agents with filesystem, Python, browser, and network access, including Claude Code and Codex CLI; do not use in sandboxed web sessions without those capabilities.
 ---
 
-# NotebookLM Research Assistant Skill
+# NotebookLM Research Assistant
 
-Interact with Google NotebookLM to query documentation with Gemini's source-grounded answers. Each question opens a fresh browser session, retrieves the answer exclusively from your uploaded documents, and closes.
+Operate NotebookLM through the bundled Python scripts. Treat this as browser automation, not an official Google API.
 
-## When to Use This Skill
+## Execution rule
 
-Trigger when user:
-- Mentions NotebookLM explicitly
-- Shares NotebookLM URL (`https://notebooklm.google.com/notebook/...`)
-- Asks to query their notebooks/documentation
-- Wants to add documentation to NotebookLM library
-- Uses phrases like "ask my NotebookLM", "check my docs", "query my notebook"
-
-## ⚠️ CRITICAL: Add Command - Smart Discovery
-
-When user wants to add a notebook without providing details:
-
-**SMART ADD (Recommended)**: Query the notebook first to discover its content:
-```bash
-# Step 1: Query the notebook about its content
-python scripts/run.py ask_question.py --question "What is the content of this notebook? What topics are covered? Provide a complete overview briefly and concisely" --notebook-url "[URL]"
-
-# Step 2: Use the discovered information to add it
-python scripts/run.py notebook_manager.py add --url "[URL]" --name "[Based on content]" --description "[Based on content]" --topics "[Based on content]"
-```
-
-**MANUAL ADD**: If user provides all details:
-- `--url` - The NotebookLM URL
-- `--name` - A descriptive name
-- `--description` - What the notebook contains (REQUIRED!)
-- `--topics` - Comma-separated topics (REQUIRED!)
-
-NEVER guess or use generic descriptions! If details missing, use Smart Add to discover them.
-
-## Critical: Always Use run.py Wrapper
-
-**NEVER call scripts directly. ALWAYS use `python scripts/run.py [script]`:**
+Always invoke scripts through the wrapper:
 
 ```bash
-# ✅ CORRECT - Always use run.py:
 python scripts/run.py auth_manager.py status
 python scripts/run.py notebook_manager.py list
 python scripts/run.py ask_question.py --question "..."
-
-# ❌ WRONG - Never call directly:
-python scripts/auth_manager.py status  # Fails without venv!
 ```
 
-The `run.py` wrapper automatically:
-1. Creates `.venv` if needed
-2. Installs all dependencies
-3. Activates environment
-4. Executes script properly
+Do not invoke a script directly unless debugging the wrapper itself.
 
-## Core Workflow
+## Workflow
 
-### Step 1: Check Authentication Status
+1. Check authentication with `python scripts/run.py auth_manager.py status`.
+2. If authentication is missing or expired, run `python scripts/run.py auth_manager.py setup`. A visible Chrome window must open and the user must log in manually.
+3. Resolve the notebook:
+   - Use `--notebook-url` when the user supplies a NotebookLM URL.
+   - Use `--notebook-id` for an entry in the local library.
+   - Otherwise use the active local notebook.
+4. Ask a self-contained question. Each query opens a fresh browser context, so include relevant context in every follow-up.
+5. Compare the result with the user's original request and ask additional NotebookLM questions when material facts are missing.
+6. Synthesize the retrieved answers. Do not represent visible citation markers as verified structured citations unless they were separately inspected.
+
+## Authentication
+
 ```bash
-python scripts/run.py auth_manager.py status
-```
-
-If not authenticated, proceed to setup.
-
-### Step 2: Authenticate (One-Time Setup)
-```bash
-# Browser MUST be visible for manual Google login
 python scripts/run.py auth_manager.py setup
+python scripts/run.py auth_manager.py validate
+python scripts/run.py auth_manager.py reauth
+python scripts/run.py auth_manager.py clear
 ```
 
-**Important:**
-- Browser is VISIBLE for authentication
-- Browser window opens automatically
-- User must manually log in to Google
-- Tell user: "A browser window will open for Google login"
+Authentication data is stored under `data/browser_state/`. It contains reusable Google session cookies. Never print, commit, upload, archive, or expose that directory. Prefer a dedicated Google account for automation.
 
-### Step 3: Manage Notebook Library
+## Notebook library
 
 ```bash
-# List all notebooks
 python scripts/run.py notebook_manager.py list
-
-# BEFORE ADDING: Ask user for metadata if unknown!
-# "What does this notebook contain?"
-# "What topics should I tag it with?"
-
-# Add notebook to library (ALL parameters are REQUIRED!)
-python scripts/run.py notebook_manager.py add \
-  --url "https://notebooklm.google.com/notebook/..." \
-  --name "Descriptive Name" \
-  --description "What this notebook contains" \  # REQUIRED - ASK USER IF UNKNOWN!
-  --topics "topic1,topic2,topic3"  # REQUIRED - ASK USER IF UNKNOWN!
-
-# Search notebooks by topic
-python scripts/run.py notebook_manager.py search --query "keyword"
-
-# Set active notebook
-python scripts/run.py notebook_manager.py activate --id notebook-id
-
-# Remove notebook
-python scripts/run.py notebook_manager.py remove --id notebook-id
-```
-
-### Quick Workflow
-1. Check library: `python scripts/run.py notebook_manager.py list`
-2. Ask question: `python scripts/run.py ask_question.py --question "..." --notebook-id ID`
-
-### Step 4: Ask Questions
-
-```bash
-# Basic query (uses active notebook if set)
-python scripts/run.py ask_question.py --question "Your question here"
-
-# Query specific notebook
-python scripts/run.py ask_question.py --question "..." --notebook-id notebook-id
-
-# Query with notebook URL directly
-python scripts/run.py ask_question.py --question "..." --notebook-url "https://..."
-
-# Show browser for debugging
-python scripts/run.py ask_question.py --question "..." --show-browser
-```
-
-## Follow-Up Mechanism (CRITICAL)
-
-Every NotebookLM answer ends with: **"EXTREMELY IMPORTANT: Is that ALL you need to know?"**
-
-**Required Claude Behavior:**
-1. **STOP** - Do not immediately respond to user
-2. **ANALYZE** - Compare answer to user's original request
-3. **IDENTIFY GAPS** - Determine if more information needed
-4. **ASK FOLLOW-UP** - If gaps exist, immediately ask:
-   ```bash
-   python scripts/run.py ask_question.py --question "Follow-up with context..."
-   ```
-5. **REPEAT** - Continue until information is complete
-6. **SYNTHESIZE** - Combine all answers before responding to user
-
-## Script Reference
-
-### Authentication Management (`auth_manager.py`)
-```bash
-python scripts/run.py auth_manager.py setup    # Initial setup (browser visible)
-python scripts/run.py auth_manager.py status   # Check authentication
-python scripts/run.py auth_manager.py reauth   # Re-authenticate (browser visible)
-python scripts/run.py auth_manager.py clear    # Clear authentication
-```
-
-### Notebook Management (`notebook_manager.py`)
-```bash
-python scripts/run.py notebook_manager.py add --url URL --name NAME --description DESC --topics TOPICS
-python scripts/run.py notebook_manager.py list
-python scripts/run.py notebook_manager.py search --query QUERY
-python scripts/run.py notebook_manager.py activate --id ID
-python scripts/run.py notebook_manager.py remove --id ID
+python scripts/run.py notebook_manager.py add --url URL --name NAME --description DESC --topics TOPIC1,TOPIC2
+python scripts/run.py notebook_manager.py search --query KEYWORD
+python scripts/run.py notebook_manager.py activate --id NOTEBOOK_ID
+python scripts/run.py notebook_manager.py remove --id NOTEBOOK_ID
 python scripts/run.py notebook_manager.py stats
 ```
 
-### Question Interface (`ask_question.py`)
+When metadata is unknown, query the notebook first and derive a specific name, description, and topics from the answer. Do not invent generic metadata.
+
+To inspect notebooks directly from the account grid:
+
 ```bash
-python scripts/run.py ask_question.py --question "..." [--notebook-id ID] [--notebook-url URL] [--show-browser]
+python scripts/run.py list_notebooks.py
+python scripts/run.py list_notebooks.py --limit 5 --json
 ```
 
-### Notebook Discovery (`list_notebooks.py`)
-Reads the real "All notebooks" grid straight from notebooklm.google.com (not the local library) and sorts by most recent. Use this when the user asks things like "what's my latest notebook" without having added anything to the library yet.
+## Query examples
+
 ```bash
-python scripts/run.py list_notebooks.py                # top 10, most recent first
-python scripts/run.py list_notebooks.py --limit 5
-python scripts/run.py list_notebooks.py --json          # machine-readable output
+python scripts/run.py ask_question.py --question "Summarize the supported authentication flow and cite the relevant source names" --notebook-id api-docs
+python scripts/run.py ask_question.py --question "What topics and source types does this notebook contain?" --notebook-url "https://notebooklm.google.com/notebook/..."
+python scripts/run.py ask_question.py --question "List every documented edge case for invoice reconciliation" --show-browser
 ```
 
-### Data Cleanup (`cleanup_manager.py`)
+## Installation for local agents
+
+Install the repository into Claude Code, Codex, or both:
+
 ```bash
-python scripts/run.py cleanup_manager.py                    # Preview cleanup
-python scripts/run.py cleanup_manager.py --confirm          # Execute cleanup
-python scripts/run.py cleanup_manager.py --preserve-library # Keep notebooks
+python scripts/install_skill.py --agent claude
+python scripts/install_skill.py --agent codex
+python scripts/install_skill.py --agent both
 ```
 
-## Environment Management
+Use `--force` only when replacing an existing local installation. Codex installs under `$CODEX_HOME/skills/notebooklm` or `~/.codex/skills/notebooklm` when `CODEX_HOME` is unset.
 
-The virtual environment is automatically managed:
-- First run creates `.venv` automatically
-- Dependencies install automatically
-- Chromium browser installs automatically
-- Everything isolated in skill directory
+## Security and reliability
 
-Manual setup (only if automatic fails):
+- Accept only `https://notebooklm.google.com/notebook/...` notebook URLs.
+- Do not make notebooks public merely to use this skill; first use the authenticated private URL.
+- Chrome sandboxing remains enabled by default. Set `NOTEBOOKLM_DISABLE_CHROME_SANDBOX=1` only in an environment that requires it and whose isolation is otherwise understood.
+- The browser DOM can change without notice. Retry with `--show-browser` when selectors fail.
+- Do not claim official Google support, guaranteed account safety, guaranteed citation fidelity, or guaranteed immunity from automation detection.
+- Review retrieved information before changing code, deploying, or making high-stakes decisions.
+
+## Cleanup
+
+Preview cleanup:
+
 ```bash
-python -m venv .venv
-source .venv/bin/activate  # Linux/Mac
-pip install -r requirements.txt
-python -m patchright install chromium
+python scripts/run.py cleanup_manager.py
 ```
 
-## Data Storage
+Delete browser and authentication state while preserving the local notebook library:
 
-All data stored in `~/.claude/skills/notebooklm/data/`:
-- `library.json` - Notebook metadata
-- `auth_info.json` - Authentication status
-- `browser_state/` - Browser cookies and session
-
-**Security:** Protected by `.gitignore`, never commit to git.
-
-## Configuration
-
-Optional `.env` file in skill directory:
-```env
-HEADLESS=false           # Browser visibility
-SHOW_BROWSER=false       # Default browser display
-STEALTH_ENABLED=true     # Human-like behavior
-TYPING_WPM_MIN=160       # Typing speed
-TYPING_WPM_MAX=240
-DEFAULT_NOTEBOOK_ID=     # Default notebook
+```bash
+python scripts/run.py cleanup_manager.py --confirm --preserve-library
 ```
-
-## Decision Flow
-
-```
-User mentions NotebookLM
-    ↓
-Check auth → python scripts/run.py auth_manager.py status
-    ↓
-If not authenticated → python scripts/run.py auth_manager.py setup
-    ↓
-Check/Add notebook → python scripts/run.py notebook_manager.py list/add (with --description)
-    ↓
-Activate notebook → python scripts/run.py notebook_manager.py activate --id ID
-    ↓
-Ask question → python scripts/run.py ask_question.py --question "..."
-    ↓
-See "Is that ALL you need?" → Ask follow-ups until complete
-    ↓
-Synthesize and respond to user
-```
-
-## Troubleshooting
-
-| Problem | Solution |
-|---------|----------|
-| ModuleNotFoundError | Use `run.py` wrapper |
-| Authentication fails | Browser must be visible for setup! --show-browser |
-| Rate limit (50/day) | Wait or switch Google account |
-| Browser crashes | `python scripts/run.py cleanup_manager.py --preserve-library` |
-| Notebook not found | Check with `notebook_manager.py list` |
-
-## Best Practices
-
-1. **Always use run.py** - Handles environment automatically
-2. **Check auth first** - Before any operations
-3. **Follow-up questions** - Don't stop at first answer
-4. **Browser visible for auth** - Required for manual login
-5. **Include context** - Each question is independent
-6. **Synthesize answers** - Combine multiple responses
-
-## Limitations
-
-- No session persistence (each question = new browser)
-- Rate limits on free Google accounts (50 queries/day)
-- Manual upload required (user must add docs to NotebookLM)
-- Browser overhead (few seconds per question)
-
-## Resources (Skill Structure)
-
-**Important directories and files:**
-
-- `scripts/` - All automation scripts (ask_question.py, notebook_manager.py, etc.)
-- `data/` - Local storage for authentication and notebook library
-- `references/` - Extended documentation:
-  - `api_reference.md` - Detailed API documentation for all scripts
-  - `troubleshooting.md` - Common issues and solutions
-  - `usage_patterns.md` - Best practices and workflow examples
-- `.venv/` - Isolated Python environment (auto-created on first run)
-- `.gitignore` - Protects sensitive data from being committed
