@@ -7,8 +7,8 @@ on:
     branches: [master]
 
 jobs:
-  install-and-syntax-check:
-    name: Install deps & syntax check (${{ matrix.os }})
+  install-and-test:
+    name: Install and test (${{ matrix.os }}, Python ${{ matrix.python-version }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -19,7 +19,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python ${{ matrix.python-version }}
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
@@ -27,22 +27,23 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install -r requirements.txt pytest
 
-      - name: Byte-compile all scripts (syntax check)
-        # bash is required here: on windows-latest, steps default to PowerShell,
-        # which does not glob-expand scripts/*.py and passes it through literally,
-        # causing py_compile to fail with "[Errno 22] Invalid argument".
+      - name: Compile scripts
         shell: bash
-        run: python -m py_compile scripts/*.py
+        run: python -m py_compile scripts/*.py tests/*.py
 
-      - name: Confirm patchright imports correctly
+      - name: Run unit tests
+        run: pytest -q
+
+      - name: Check skill structure
+        shell: bash
+        run: |
+          test -f SKILL.md
+          test -f agents/openai.yaml
+          python -c "from pathlib import Path; text=Path('SKILL.md').read_text(encoding='utf-8'); assert text.startswith('---\nname: notebooklm\n')"
+
+      - name: Confirm Patchright import
         run: python -c "import patchright; print('patchright OK:', patchright.__file__)"
 
-  # Note: we deliberately do NOT launch a real Chrome/Google login in CI.
-  # This skill authenticates against a live Google account interactively;
-  # scripting that in a headless CI runner would violate Google's ToS and
-  # isn't something this project wants to encourage. The job above proves
-  # the skill installs and its scripts are syntactically valid on all three
-  # major desktop platforms - the actual auth flow is exercised locally by
-  # each user during one-time setup.
+  # Live Google authentication and NotebookLM DOM tests intentionally remain local.
