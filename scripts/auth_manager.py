@@ -37,32 +37,47 @@ GOOGLE_SESSION_COOKIES = {
 class AuthManager:
     """Manage interactive Google login and persisted NotebookLM browser state."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         DATA_DIR.mkdir(parents=True, exist_ok=True)
         BROWSER_STATE_DIR.mkdir(parents=True, exist_ok=True)
         self.state_file = STATE_FILE
         self.auth_info_file = AUTH_INFO_FILE
         self.browser_state_dir = BROWSER_STATE_DIR
 
+    @staticmethod
+    def _cookie_names(cookies: list[dict[str, Any]]) -> set[str]:
+        return {
+            str(cookie.get("name"))
+            for cookie in cookies
+            if isinstance(cookie, dict) and cookie.get("name")
+        }
+
+    @classmethod
+    def _has_google_session_cookies(cls, cookies: list[dict[str, Any]]) -> bool:
+        return bool(cls._cookie_names(cookies).intersection(GOOGLE_SESSION_COOKIES))
+
     def is_authenticated(self) -> bool:
+        """Return whether saved state contains plausible Google session cookies."""
         if not self.state_file.exists():
             return False
         try:
             state = json.loads(self.state_file.read_text(encoding="utf-8"))
             cookies = state.get("cookies", [])
-            names = {cookie.get("name") for cookie in cookies if isinstance(cookie, dict)}
-            if not names.intersection(GOOGLE_SESSION_COOKIES):
+            if not isinstance(cookies, list) or not self._has_google_session_cookies(cookies):
                 return False
         except (OSError, ValueError, TypeError):
             return False
 
         age_days = (time.time() - self.state_file.stat().st_mtime) / 86400
         if age_days > 7:
-            print(f"Warning: browser state is {age_days:.1f} days old and may require re-authentication")
+            print(
+                f"Warning: browser state is {age_days:.1f} days old and may "
+                "require re-authentication"
+            )
         return True
 
     def get_auth_info(self) -> Dict[str, Any]:
-        info = {
+        info: Dict[str, Any] = {
             "authenticated": self.is_authenticated(),
             "state_file": str(self.state_file),
             "state_exists": self.state_file.exists(),
@@ -79,11 +94,10 @@ class AuthManager:
             ) / 3600
         return info
 
-    @staticmethod
-    def _has_google_session(context: BrowserContext) -> bool:
+    @classmethod
+    def _has_google_session(cls, context: BrowserContext) -> bool:
         try:
-            names = {cookie.get("name") for cookie in context.cookies()}
-            return bool(names.intersection(GOOGLE_SESSION_COOKIES))
+            return cls._has_google_session_cookies(context.cookies())
         except Exception:
             return False
 
@@ -95,7 +109,8 @@ class AuthManager:
             and cls._has_google_session(context)
         )
 
-    def setup_auth(self, headless: bool = False, timeout_minutes: int = 10) -> bool:
+    def setup_auth(self, headless: bool = False, timeout_minutes: float = 10) -> bool:
+        """Open a visible browser and wait for a completed Google login."""
         if headless:
             print("Authentication setup requires a visible browser; remove --headless")
             return False
@@ -135,8 +150,11 @@ class AuthManager:
             return False
         except Exception as exc:
             print(f"Authentication failed: {exc}")
-            print("Run this command from a normal PowerShell window if Codex cannot open desktop applications:")
-            print("  python scripts/run.py auth_manager.py setup --timeout 15")
+            print(
+                "Run this command from a normal PowerShell window if Codex cannot "
+                "open desktop applications:"
+            )
+            print("  python scripts/run.py auth_manager.py ensure --timeout 15")
             return False
         finally:
             if context:
@@ -149,6 +167,16 @@ class AuthManager:
                     playwright.stop()
                 except Exception:
                     pass
+
+    def ensure_auth(self, timeout_minutes: float = 15) -> bool:
+        """Validate saved auth or launch interactive setup in one command."""
+        if self.is_authenticated():
+            if self.validate_auth():
+                return True
+            print("Saved authentication is invalid; starting a fresh login")
+            if not self.clear_auth():
+                return False
+        return self.setup_auth(headless=False, timeout_minutes=timeout_minutes)
 
     def _save_browser_state(self, context: BrowserContext) -> None:
         context.storage_state(path=str(self.state_file))
@@ -174,15 +202,16 @@ class AuthManager:
                 self.auth_info_file.unlink()
             if self.browser_state_dir.exists():
                 shutil.rmtree(self.browser_state_dir)
-                self.browser_state_dir.mkdir(parents=True, exist_ok=True)
+            self.browser_state_dir.mkdir(parents=True, exist_ok=True)
             print("Authentication data cleared")
             return True
         except OSError as exc:
             print(f"Error clearing authentication: {exc}")
             return False
 
-    def re_auth(self, headless: bool = False, timeout_minutes: int = 10) -> bool:
-        self.clear_auth()
+    def re_auth(self, headless: bool = False, timeout_minutes: float = 10) -> bool:
+        if not self.clear_auth():
+            return False
         return self.setup_auth(headless, timeout_minutes)
 
     def validate_auth(self) -> bool:
@@ -220,7 +249,7 @@ class AuthManager:
                     pass
 
 
-def main() -> int:
+def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Manage NotebookLM authentication")
     subparsers = parser.add_subparsers(dest="command", help="Commands")
 
@@ -228,18 +257,30 @@ def main() -> int:
     setup_parser.add_argument("--headless", action="store_true")
     setup_parser.add_argument("--timeout", type=float, default=10)
 
+    ensure_parser = subparsers.add_parser(
+        "ensure",
+        help="Validate saved authentication or open a browser to sign in",
+    )
+    ensure_parser.add_argument("--timeout", type=float, default=15)
+
     subparsers.add_parser("status", help="Check authentication status")
     subparsers.add_parser("validate", help="Validate authentication")
     subparsers.add_parser("clear", help="Clear authentication")
 
     reauth_parser = subparsers.add_parser("reauth", help="Clear and authenticate again")
     reauth_parser.add_argument("--timeout", type=float, default=10)
+    return parser
 
+
+def main() -> int:
+    parser = build_parser()
     args = parser.parse_args()
     auth = AuthManager()
 
     if args.command == "setup":
         return 0 if auth.setup_auth(args.headless, args.timeout) else 1
+    if args.command == "ensure":
+        return 0 if auth.ensure_auth(args.timeout) else 1
     if args.command == "status":
         info = auth.get_auth_info()
         authenticated = bool(info["authenticated"])
@@ -252,7 +293,7 @@ def main() -> int:
         print(f"  State file: {info['state_file']}")
         if not authenticated:
             print("\nNext required step:")
-            print("  python scripts/run.py auth_manager.py setup --timeout 15")
+            print("  python scripts/run.py auth_manager.py ensure --timeout 15")
             print("Do not stop at status; authentication requires a visible browser login.")
             return 3
         return 0
