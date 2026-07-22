@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Optional
 from urllib.parse import urlparse
 
-from patchright.sync_api import sync_playwright
+from browser_api import sync_playwright
 
 sys.path.insert(0, str(Path(__file__).parent))
 
