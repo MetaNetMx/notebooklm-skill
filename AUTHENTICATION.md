@@ -7,6 +7,19 @@ This skill uses a **hybrid authentication approach** that combines the best of b
 1. **Persistent Browser Profile** (`user_data_dir`) for consistent browser fingerprinting
 2. **Manual Cookie Injection** from `state.json` for reliable session cookie persistence
 
+
+## Codex CLI login flow
+
+Use one command for normal authentication:
+
+```powershell
+python scripts/run.py auth_manager.py ensure --timeout 15
+```
+
+`ensure` validates an existing session and otherwise opens a visible browser for Google login. A plain `status` command is diagnostic only. When it reports `Authenticated: No`, it exits with code 3 and prints the required `ensure` command so an agent does not incorrectly stop after reporting the unauthenticated state.
+
+The wrapper prefers a skill-local Patchright environment. It uses a host Playwright runtime only when local installation fails. This matches the more reliable login behavior of the original Claude Code version while retaining compatibility with restricted Codex environments.
+
 ## Why This Approach?
 
 ### The Problem
