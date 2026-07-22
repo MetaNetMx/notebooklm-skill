@@ -12,7 +12,7 @@ Operate NotebookLM through the bundled Python scripts. Treat this as browser aut
 Always invoke scripts through the wrapper:
 
 ```bash
-python scripts/run.py auth_manager.py status
+python scripts/run.py auth_manager.py ensure --timeout 15
 python scripts/run.py notebook_manager.py list
 python scripts/run.py ask_question.py --question "..."
 ```
@@ -21,8 +21,8 @@ Do not invoke a script directly unless debugging the wrapper itself.
 
 ## Workflow
 
-1. Check authentication with `python scripts/run.py auth_manager.py status`.
-2. If authentication is missing or expired, run `python scripts/run.py auth_manager.py setup`. A visible browser must open and the user must log in manually.
+1. Run `python scripts/run.py auth_manager.py ensure --timeout 15`. This command validates an existing session or opens a visible browser for Google login.
+2. Do not stop after `status` reports `Authenticated: No`. Continue immediately with `ensure`; authentication is incomplete until the browser login succeeds.
 3. Resolve the notebook:
    - Use `--notebook-url` when the user supplies a NotebookLM URL.
    - Use `--notebook-id` for an entry in the local library.
@@ -34,7 +34,8 @@ Do not invoke a script directly unless debugging the wrapper itself.
 ## Authentication
 
 ```bash
-python scripts/run.py auth_manager.py setup
+python scripts/run.py auth_manager.py ensure --timeout 15
+python scripts/run.py auth_manager.py setup --timeout 15
 python scripts/run.py auth_manager.py validate
 python scripts/run.py auth_manager.py reauth
 python scripts/run.py auth_manager.py clear
@@ -74,7 +75,7 @@ python scripts/run.py ask_question.py --question "List every documented edge cas
 
 Prefer Patchright when it can be installed. Fall back to an existing Playwright installation when Patchright is unavailable, including managed environments with restricted package indexes. The wrapper may use a compatible host Python instead of creating an isolated `.venv`.
 
-If `auth_manager.py status` reports `Authenticated: No`, the runtime is working; proceed to interactive setup on a machine with a visible browser. A sandboxed web session cannot complete Google login even when dependency checks pass.
+Use `auth_manager.py ensure --timeout 15` as the normal entry point. If `status` reports `Authenticated: No`, do not summarize and stop: execute `ensure` immediately. A sandboxed web session cannot complete Google login, but Codex CLI on the user's desktop should open the browser after command approval.
 
 ## Installation for local agents
 
