@@ -1,102 +1,68 @@
 #!/usr/bin/env python3
-"""
-Universal runner for NotebookLM skill scripts
-Ensures all scripts run with the correct virtual environment
-"""
+"""Run skill scripts inside a self-managed virtual environment."""
 
 import os
-import sys
 import subprocess
+import sys
 from pathlib import Path
 
 
-def get_venv_python():
-    """Get the virtual environment Python executable"""
+def paths():
     skill_dir = Path(__file__).parent.parent
     venv_dir = skill_dir / ".venv"
-
-    if os.name == 'nt':  # Windows
-        venv_python = venv_dir / "Scripts" / "python.exe"
-    else:  # Unix/Linux/Mac
-        venv_python = venv_dir / "bin" / "python"
-
-    return venv_python
+    python_path = venv_dir / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
+    return skill_dir, venv_dir, python_path
 
 
-def ensure_venv():
-    """Ensure virtual environment exists"""
-    skill_dir = Path(__file__).parent.parent
-    venv_dir = skill_dir / ".venv"
+def environment_works(python_path: Path) -> bool:
+    if not python_path.exists():
+        return False
+    result = subprocess.run(
+        [str(python_path), "-c", "import patchright, dotenv"],
+        capture_output=True,
+        text=True,
+    )
+    return result.returncode == 0
+
+
+def ensure_venv() -> Path:
+    skill_dir, venv_dir, python_path = paths()
     setup_script = skill_dir / "scripts" / "setup_environment.py"
-
-    # Check if venv exists
-    if not venv_dir.exists():
-        print("🔧 First-time setup: Creating virtual environment...")
-        print("   This may take a minute...")
-
-        # Run setup with system Python
+    if not environment_works(python_path):
+        print("Setting up or repairing the skill environment...")
         result = subprocess.run([sys.executable, str(setup_script)])
-        if result.returncode != 0:
-            print("❌ Failed to set up environment")
+        if result.returncode != 0 or not environment_works(python_path):
+            print("[X] Failed to set up the environment")
             sys.exit(1)
-
-        print("✅ Environment ready!")
-
-    return get_venv_python()
+    return python_path
 
 
-def main():
-    """Main runner"""
+def main() -> None:
     if len(sys.argv) < 2:
-        print("Usage: python run.py <script_name> [args...]")
-        print("\nAvailable scripts:")
-        print("  ask_question.py    - Query NotebookLM")
-        print("  notebook_manager.py - Manage notebook library")
-        print("  list_notebooks.py   - List notebooks straight from the account (sorted by most recent)")
-        print("  session_manager.py  - Manage sessions")
-        print("  auth_manager.py     - Handle authentication")
-        print("  cleanup_manager.py  - Clean up skill data")
+        print("Usage: python scripts/run.py <script_name> [args...]")
         sys.exit(1)
 
     script_name = sys.argv[1]
-    script_args = sys.argv[2:]
+    if script_name.startswith("scripts/"):
+        script_name = script_name[8:]
+    if not script_name.endswith(".py"):
+        script_name += ".py"
+    if Path(script_name).name != script_name:
+        print("[X] Script name must not contain a path")
+        sys.exit(2)
 
-    # Handle both "scripts/script.py" and "script.py" formats
-    if script_name.startswith('scripts/'):
-        # Remove the scripts/ prefix if provided
-        script_name = script_name[8:]  # len('scripts/') = 8
-
-    # Ensure .py extension
-    if not script_name.endswith('.py'):
-        script_name += '.py'
-
-    # Get script path
-    skill_dir = Path(__file__).parent.parent
+    skill_dir, _, _ = paths()
     script_path = skill_dir / "scripts" / script_name
-
-    if not script_path.exists():
-        print(f"❌ Script not found: {script_name}")
-        print(f"   Working directory: {Path.cwd()}")
-        print(f"   Skill directory: {skill_dir}")
-        print(f"   Looked for: {script_path}")
+    if not script_path.is_file():
+        print(f"[X] Script not found: {script_name}")
         sys.exit(1)
 
-    # Ensure venv exists and get Python executable
-    venv_python = ensure_venv()
-
-    # Build command
-    cmd = [str(venv_python), str(script_path)] + script_args
-
-    # Run the script
+    command = [str(ensure_venv()), str(script_path), *sys.argv[2:]]
     try:
-        result = subprocess.run(cmd)
+        result = subprocess.run(command)
         sys.exit(result.returncode)
     except KeyboardInterrupt:
-        print("\n⚠️ Interrupted by user")
         sys.exit(130)
-    except Exception as e:
-        print(f"❌ Error: {e}")
-        sys.exit(1)
 
 
 if __name__ == "__main__":

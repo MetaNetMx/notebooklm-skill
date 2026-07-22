@@ -1,0 +1,4 @@
+interface:
+  display_name: "NotebookLM Research"
+  short_description: "Query authenticated NotebookLM notebooks from a local agent."
+  brand_color: "#4285F4"
