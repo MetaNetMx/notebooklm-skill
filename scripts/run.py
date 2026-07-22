@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Run skill scripts inside a compatible Python environment."""
+"""Run skill scripts inside a compatible Python environment.
+
+A skill-local environment with Patchright is preferred because Google login is
+more reliable there. A compatible host Python (usually Playwright in managed
+agent runtimes) is used only when local setup cannot be completed.
+"""
 
 from __future__ import annotations
 
@@ -36,6 +41,25 @@ def environment_works(python_path: Path) -> bool:
     return result.returncode == 0
 
 
+def browser_backend(python_path: Path) -> str | None:
+    if not environment_works(python_path):
+        return None
+    skill_dir, _, _ = paths()
+    scripts_dir = skill_dir / "scripts"
+    code = (
+        "import sys; "
+        f"sys.path.insert(0, {str(scripts_dir)!r}); "
+        "import browser_api; print(browser_api.BROWSER_BACKEND)"
+    )
+    result = subprocess.run(
+        [str(python_path), "-c", code],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return result.stdout.strip() if result.returncode == 0 else None
+
+
 def ensure_runtime() -> Path:
     skill_dir, _, venv_python = paths()
     setup_script = skill_dir / "scripts" / "setup_environment.py"
@@ -44,19 +68,19 @@ def ensure_runtime() -> Path:
         return venv_python
 
     host_python = Path(sys.executable)
+    print("Setting up or repairing the skill-local environment...")
+    result = subprocess.run([str(host_python), str(setup_script)], check=False)
+    if result.returncode == 0 and environment_works(venv_python):
+        backend = browser_backend(venv_python)
+        print(f"Using skill-local Python ({backend}): {venv_python}")
+        return venv_python
+
     if environment_works(host_python):
-        print(f"Using compatible host Python: {host_python}")
+        backend = browser_backend(host_python)
+        print(f"Using compatible host Python ({backend} fallback): {host_python}")
         return host_python
 
-    print("Setting up or repairing the skill environment...")
-    result = subprocess.run([sys.executable, str(setup_script)], check=False)
-    if result.returncode == 0:
-        if environment_works(venv_python):
-            return venv_python
-        if environment_works(host_python):
-            return host_python
-
-    print("[X] Failed to set up the environment")
+    print("[X] Failed to set up a supported browser environment")
     raise SystemExit(1)
 
 

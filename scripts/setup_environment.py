@@ -60,10 +60,51 @@ class SkillEnvironment:
             "chromium",
             "chromium-browser",
             "chrome",
+            "msedge",
         ):
             found = shutil.which(name)
             if found:
                 return found
+
+        candidates = []
+        if os.name == "nt":
+            roots = [
+                os.environ.get("PROGRAMFILES"),
+                os.environ.get("PROGRAMFILES(X86)"),
+                os.environ.get("LOCALAPPDATA"),
+            ]
+            relative_paths = [
+                Path("Google/Chrome/Application/chrome.exe"),
+                Path("Microsoft/Edge/Application/msedge.exe"),
+                Path("BraveSoftware/Brave-Browser/Application/brave.exe"),
+            ]
+            candidates.extend(
+                Path(root) / relative
+                for root in roots
+                if root
+                for relative in relative_paths
+            )
+        elif sys.platform == "darwin":
+            candidates.extend(
+                [
+                    Path("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"),
+                    Path("/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge"),
+                    Path("/Applications/Brave Browser.app/Contents/MacOS/Brave Browser"),
+                ]
+            )
+        else:
+            candidates.extend(
+                [
+                    Path("/usr/bin/google-chrome"),
+                    Path("/usr/bin/google-chrome-stable"),
+                    Path("/usr/bin/chromium"),
+                    Path("/usr/bin/chromium-browser"),
+                ]
+            )
+
+        for candidate in candidates:
+            if candidate.is_file():
+                return str(candidate)
         return None
 
     def _python_environment_works(self, python_executable: Path | str) -> bool:
@@ -140,32 +181,42 @@ class SkillEnvironment:
         )
 
     def ensure_venv(self) -> bool:
+        # Prefer a local Patchright environment. Playwright remains a valid
+        # fallback, but Google login is generally more reliable with Patchright.
         if self._environment_works():
+            backend = self._browser_backend(self.venv_python)
+            if backend == "patchright":
+                return True
+            if backend == "playwright":
+                print("Existing local environment uses Playwright; trying Patchright upgrade")
+                result = self._run([str(self.venv_pip), "install", "patchright>=1.55,<2"])
+                if result.returncode == 0 and self._browser_backend(self.venv_python) == "patchright":
+                    self._ensure_browser_binary("patchright")
+                return self._environment_works()
+
+        host_works = self._python_environment_works(sys.executable)
+
+        # Start isolated so a host Playwright installation does not prevent the
+        # preferred Patchright backend from being installed.
+        if self._create_venv(inherit_system_packages=False):
+            if self._ensure_core_dependency():
+                backend = self._ensure_browser_backend()
+                if backend:
+                    print(f"Browser backend: {backend}")
+                    self._ensure_browser_binary(backend)
+                    if self._environment_works():
+                        return True
+
+        if host_works:
+            backend = self._browser_backend(sys.executable) or "unknown"
+            print(f"Local setup unavailable; using host {backend} fallback: {sys.executable}")
             return True
-        if self._python_environment_works(sys.executable):
-            print(f"Using compatible host Python: {sys.executable}")
-            return True
 
-        system_backend = self._browser_backend(sys.executable)
-        system_dotenv = importlib.util.find_spec("dotenv") is not None
-        inherit_system = bool(system_backend or system_dotenv)
-
-        if not self._create_venv(inherit_system_packages=inherit_system):
-            return False
-        if not self._ensure_core_dependency():
-            return False
-
-        backend = self._ensure_browser_backend()
-        if not backend:
-            print(
-                "[X] No supported browser backend is available. Patchright and "
-                "Playwright could not be imported or installed."
-            )
-            return False
-
-        print(f"Browser backend: {backend}")
-        self._ensure_browser_binary(backend)
-        return self._environment_works()
+        print(
+            "[X] No supported browser backend is available. Patchright and "
+            "Playwright could not be imported or installed."
+        )
+        return False
 
     def is_in_skill_venv(self) -> bool:
         return sys.prefix == str(self.venv_dir)

@@ -6,6 +6,7 @@ import json
 import os
 import random
 import shutil
+import sys
 import time
 from pathlib import Path
 from typing import Optional
@@ -28,10 +29,51 @@ class BrowserFactory:
             "chromium",
             "chromium-browser",
             "chrome",
+            "msedge",
         ):
             found = shutil.which(name)
             if found:
                 return found
+
+        candidates = []
+        if os.name == "nt":
+            roots = [
+                os.environ.get("PROGRAMFILES"),
+                os.environ.get("PROGRAMFILES(X86)"),
+                os.environ.get("LOCALAPPDATA"),
+            ]
+            relative_paths = [
+                Path("Google/Chrome/Application/chrome.exe"),
+                Path("Microsoft/Edge/Application/msedge.exe"),
+                Path("BraveSoftware/Brave-Browser/Application/brave.exe"),
+            ]
+            candidates.extend(
+                Path(root) / relative
+                for root in roots
+                if root
+                for relative in relative_paths
+            )
+        elif sys.platform == "darwin":
+            candidates.extend(
+                [
+                    Path("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"),
+                    Path("/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge"),
+                    Path("/Applications/Brave Browser.app/Contents/MacOS/Brave Browser"),
+                ]
+            )
+        else:
+            candidates.extend(
+                [
+                    Path("/usr/bin/google-chrome"),
+                    Path("/usr/bin/google-chrome-stable"),
+                    Path("/usr/bin/chromium"),
+                    Path("/usr/bin/chromium-browser"),
+                ]
+            )
+
+        for candidate in candidates:
+            if candidate.is_file():
+                return str(candidate)
         return None
 
     @staticmethod
