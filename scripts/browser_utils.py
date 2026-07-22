@@ -1,18 +1,38 @@
 """Browser launching, persisted auth, and interaction helpers."""
 
+from __future__ import annotations
+
 import json
 import os
 import random
+import shutil
 import time
+from pathlib import Path
 from typing import Optional
 
-from patchright.sync_api import BrowserContext, ElementHandle, Page, Playwright
-
+from browser_api import BROWSER_BACKEND, BrowserContext, ElementHandle, Page, Playwright
 from config import BROWSER_ARGS, BROWSER_PROFILE_DIR, STATE_FILE, USER_AGENT
 
 
 class BrowserFactory:
-    """Create a persistent, locally authenticated Chrome context."""
+    """Create a persistent, locally authenticated browser context."""
+
+    @staticmethod
+    def find_browser_executable() -> Optional[str]:
+        override = os.environ.get("NOTEBOOKLM_BROWSER_EXECUTABLE")
+        if override and Path(override).is_file():
+            return override
+        for name in (
+            "google-chrome",
+            "google-chrome-stable",
+            "chromium",
+            "chromium-browser",
+            "chrome",
+        ):
+            found = shutil.which(name)
+            if found:
+                return found
+        return None
 
     @staticmethod
     def launch_persistent_context(
@@ -21,23 +41,52 @@ class BrowserFactory:
         user_data_dir: str = str(BROWSER_PROFILE_DIR),
     ) -> BrowserContext:
         args = list(BROWSER_ARGS)
-        if os.environ.get("NOTEBOOKLM_DISABLE_CHROME_SANDBOX", "").lower() in {"1", "true", "yes"}:
+        if os.environ.get("NOTEBOOKLM_DISABLE_CHROME_SANDBOX", "").lower() in {
+            "1",
+            "true",
+            "yes",
+        }:
             args.append("--no-sandbox")
 
-        kwargs = {
+        base_kwargs = {
             "user_data_dir": user_data_dir,
-            "channel": "chrome",
             "headless": headless,
             "no_viewport": True,
             "ignore_default_args": ["--enable-automation"],
             "args": args,
         }
         if USER_AGENT:
-            kwargs["user_agent"] = USER_AGENT
+            base_kwargs["user_agent"] = USER_AGENT
 
-        context = playwright.chromium.launch_persistent_context(**kwargs)
-        BrowserFactory._inject_cookies(context)
-        return context
+        executable = BrowserFactory.find_browser_executable()
+        attempts = []
+        override = os.environ.get("NOTEBOOKLM_BROWSER_EXECUTABLE")
+        if override:
+            attempts.append({"executable_path": override})
+        else:
+            attempts.append({"channel": "chrome"})
+            if executable:
+                attempts.append({"executable_path": executable})
+            attempts.append({})
+
+        errors = []
+        for launch_options in attempts:
+            try:
+                context = playwright.chromium.launch_persistent_context(
+                    **base_kwargs,
+                    **launch_options,
+                )
+                BrowserFactory._inject_cookies(context)
+                return context
+            except Exception as exc:
+                errors.append(str(exc))
+
+        concise_errors = " | ".join(error.splitlines()[0] for error in errors)
+        raise RuntimeError(
+            f"Could not launch a Chromium browser with {BROWSER_BACKEND}. "
+            "Install Chrome/Chromium or set NOTEBOOKLM_BROWSER_EXECUTABLE. "
+            f"Attempts: {concise_errors}"
+        )
 
     @staticmethod
     def _inject_cookies(context: BrowserContext) -> None:

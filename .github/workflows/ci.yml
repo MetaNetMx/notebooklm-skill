@@ -24,10 +24,10 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Install dependencies
+      - name: Install preferred backend
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt pytest pyyaml
+          pip install -r requirements.txt pytest pyyaml "patchright>=1.55,<2"
 
       - name: Compile scripts
         shell: bash
@@ -46,13 +46,36 @@ jobs:
           test -f agents/openai.yaml
           python -c "from pathlib import Path; text=Path('SKILL.md').read_text(encoding='utf-8'); assert text.startswith('---\nname: notebooklm\n')"
 
-      - name: Confirm Patchright import
-        run: python -c "import patchright; print('patchright OK:', patchright.__file__)"
+      - name: Confirm preferred browser backend
+        run: python -c "import sys; sys.path.insert(0, 'scripts'); import browser_api; assert browser_api.BROWSER_BACKEND == 'patchright'; print(browser_api.BROWSER_BACKEND)"
+
+  playwright-fallback:
+    name: Test Playwright fallback
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install fallback backend
+        run: pip install -r requirements.txt pytest playwright
+
+      - name: Confirm fallback selection
+        run: python -c "import sys; sys.path.insert(0, 'scripts'); import browser_api; assert browser_api.BROWSER_BACKEND == 'playwright'; print(browser_api.BROWSER_BACKEND)"
+
+      - name: Run tests with Playwright only
+        run: pytest -q
+
+      - name: Exercise wrapper without authentication
+        run: python scripts/run.py auth_manager.py status
 
   package-skill:
     name: Package skill.zip
     runs-on: ubuntu-latest
-    needs: install-and-test
+    needs: [install-and-test, playwright-fallback]
 
     steps:
       - uses: actions/checkout@v4

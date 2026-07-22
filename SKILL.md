@@ -1,6 +1,6 @@
 ---
 name: notebooklm
-description: Query Google NotebookLM notebooks through a local authenticated Chrome session and return source-grounded answers from the user's uploaded material. Use when the user mentions NotebookLM, provides a notebooklm.google.com/notebook URL, asks to search or question their NotebookLM sources, manage a local notebook library, authenticate NotebookLM, or list notebooks from their account. Designed for local agents with filesystem, Python, browser, and network access, including Claude Code and Codex CLI; do not use in sandboxed web sessions without those capabilities.
+description: Query Google NotebookLM notebooks through a local authenticated browser session and return source-grounded answers from the user's uploaded material. Use when the user mentions NotebookLM, provides a notebooklm.google.com/notebook URL, asks to search or question their NotebookLM sources, manage a local notebook library, authenticate NotebookLM, or list notebooks from their account. Designed for local agents with filesystem, Python, browser, and network access, including Claude Code and Codex CLI; browser automation may use Patchright or Playwright.
 ---
 
 # NotebookLM Research Assistant
@@ -22,7 +22,7 @@ Do not invoke a script directly unless debugging the wrapper itself.
 ## Workflow
 
 1. Check authentication with `python scripts/run.py auth_manager.py status`.
-2. If authentication is missing or expired, run `python scripts/run.py auth_manager.py setup`. A visible Chrome window must open and the user must log in manually.
+2. If authentication is missing or expired, run `python scripts/run.py auth_manager.py setup`. A visible browser must open and the user must log in manually.
 3. Resolve the notebook:
    - Use `--notebook-url` when the user supplies a NotebookLM URL.
    - Use `--notebook-id` for an entry in the local library.
@@ -70,6 +70,12 @@ python scripts/run.py ask_question.py --question "What topics and source types d
 python scripts/run.py ask_question.py --question "List every documented edge case for invoice reconciliation" --show-browser
 ```
 
+## Runtime compatibility
+
+Prefer Patchright when it can be installed. Fall back to an existing Playwright installation when Patchright is unavailable, including managed environments with restricted package indexes. The wrapper may use a compatible host Python instead of creating an isolated `.venv`.
+
+If `auth_manager.py status` reports `Authenticated: No`, the runtime is working; proceed to interactive setup on a machine with a visible browser. A sandboxed web session cannot complete Google login even when dependency checks pass.
+
 ## Installation for local agents
 
 Install the repository into Claude Code, Codex, or both:
@@ -87,6 +93,7 @@ Use `--force` only when replacing an existing local installation. Codex installs
 - Accept only `https://notebooklm.google.com/notebook/...` notebook URLs.
 - Do not make notebooks public merely to use this skill; first use the authenticated private URL.
 - Chrome sandboxing remains enabled by default. Set `NOTEBOOKLM_DISABLE_CHROME_SANDBOX=1` only in an environment that requires it and whose isolation is otherwise understood.
+- Set `NOTEBOOKLM_BROWSER_EXECUTABLE` when Chrome or Chromium is installed at a nonstandard path.
 - The browser DOM can change without notice. Retry with `--show-browser` when selectors fail.
 - Do not claim official Google support, guaranteed account safety, guaranteed citation fidelity, or guaranteed immunity from automation detection.
 - Review retrieved information before changing code, deploying, or making high-stakes decisions.

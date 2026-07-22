@@ -1,10 +1,3 @@
-# NotebookLM Skill Dependencies
-# These will be installed in the skill's local .venv
-
-# Core browser automation with anti-detection
-# Note: After installation, run: patchright install chrome
-# (Chrome is required, not Chromium, for cross-platform reliability)
-patchright==1.55.2
-
-# Environment management
-python-dotenv==1.0.0
+# Core dependency. Browser automation is resolved at runtime:
+# Patchright is preferred; an existing Playwright installation is supported.
+python-dotenv>=1.0,<2
